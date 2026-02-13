@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: symbio-exchange-api
+    runtime: node
+    buildCommand: npm install
+    startCommand: node seed.js && node index.js
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: JWT_SECRET
+        value: symbio_exchange_prod_secret_change_me
+      - key: DB_STORAGE
+        value: ./database.sqlite
+      - key: NODE_ENV
+        value: production
