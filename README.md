@@ -1,34 +1,201 @@
-# Symbio-Exchange — Industrial Symbiosis Marketplace
+# Symbio-Exchange 
 
-A B2B marketplace where factories trade industrial waste based on chemical composition.
-Built with React, Express, Sequelize, and SQLite.
+**Industrial Symbiosis Marketplace — Raw SQL Backend + React Frontend**
 
-## Quick Start
+> One factory's waste is another factory's raw material.
 
-### 1. Backend
+---
+
+##  Project Overview
+
+Symbio-Exchange is a B2B marketplace where industries can:
+- **OFFER** waste materials (fly ash, slag, chemical sludge)
+- **DEMAND** raw materials with specific chemical constraints
+- **MATCH** waste streams to buyer requirements using complex SQL queries
+- **FIND PROCESSORS** for chemical transformations via graph algorithms
+
+### Key Features
+- **Pure SQL Backend** — No ORM, every query is hand-written
+- **Complex SQL** — JOINs, GROUP BY + HAVING, EXISTS, self-JOINs
+- **Transactions** — Atomic operations with BEGIN/COMMIT/ROLLBACK
+- **Hazard Detection** — Chemical incompatibility matrix
+- **AI-Powered Search** — Natural language prompt parser
+- **Graph Processing** — 1-hop and 2-hop conversion paths
+
+---
+
+##  Live Demo
+
+- **Frontend**: https://symbx.netlify.app/
+- **Backend API**: https://symbx.onrender.com/api
+
+**Login Credentials** (all same password):
+- Email: `ntpc@example.com` | Password: `password123`
+- Email: `ultratech@example.com` | Password: `password123`
+- Email: `tata@example.com` | Password: `password123`
+
+---
+
+##  Project Structure
+
+```
+symbio-exchange/
+├── client/                 # React frontend (Vite + TailwindCSS)
+├── server/                 # Node.js + SQLite backend (raw SQL)
+├── DEPLOYMENT.md           # Full deployment guide
+└── README.md              # This file
+```
+
+---
+
+##  Quick Start
+
+### Prerequisites
+- Node.js 18+
+- Git
+
+### Local Development
 ```bash
+# Clone and setup
+git clone https://github.com/YOUR_USERNAME/symbx.git
+cd symbx
+
+# Backend
 cd server
 npm install
-npm run seed    # Seeds chemicals, users, listings, hazard rules, processors
-npm run dev     # Starts on http://localhost:5000
-```
+npm run seed
+npm start
 
-### 2. Frontend
-```bash
-cd client
+# Frontend (new terminal)
+cd ../client
 npm install
-npm run dev     # Starts on http://localhost:3000 (proxied to backend)
+npm run dev
 ```
 
-### 3. Test Flow
-1. Open `http://localhost:3000`
-2. Login with seeded account: `ntpc@example.com` / `password123`
-3. Browse the Dashboard — see 5 pre-seeded listings
-4. Go to **Smart Search** — try: *"I need fly ash with less than 1% sulfur and more than 50% silica"*
-5. Go to **Match Buyers** — enter Supply Listing ID `1` to find matching buyers
-6. Go to **Processor Finder** — select Sulfur → Calcium Oxide to see 2-hop path
+Visit http://localhost:3000
 
-## Architecture
+---
+
+##  Architecture
+
+### Backend (Raw SQL)
+- **Database**: SQLite with `better-sqlite3` driver
+- **Tables**: 7 tables with full constraints (PK, FK, CHECK, UNIQUE)
+- **Schema**: `server/config/schema.sql` — 309 lines of documented SQL
+- **Controllers**: All queries hand-written, no ORM abstraction
+
+### Frontend (React)
+- **Framework**: React 18 with Vite
+- **Styling**: TailwindCSS with dark mode
+- **Animations**: Framer Motion
+- **Icons**: Lucide React
+- **HTTP**: Axios with JWT interceptors
+
+---
+
+##  Database Schema
+
+| Table | Purpose | Key Features |
+|-------|---------|--------------|
+| `users` | Industries/factories | Auth, industry types, locations |
+| `chemicals` | Chemical master data | Hazard levels (LOW/MEDIUM/HIGH) |
+| `listings` | OFFER/DEMAND posts | Transactional core |
+| `batch_composition` | Waste composition | Property-bag approach |
+| `acceptance_criteria` | Buyer constraints | Min/max percentage ranges |
+| `hazard_matrix` | Safety rules | Incompatible chemical pairs |
+| `process_capabilities` | Processing graph | Conversion efficiencies |
+
+See `server/config/schema.sql` for complete schema with constraints.
+
+---
+
+##  Key SQL Concepts Demonstrated
+
+| Concept | Where Used |
+|---------|------------|
+| **Transactions** | `listingsController.js` — atomic listing creation |
+| **EXISTS Subqueries** | `searchController.js` — filter matching |
+| **GROUP BY + HAVING** | `searchController.js` — star query for buyer matching |
+| **Self-JOIN** | `searchController.js` — 2-hop processor paths |
+| **Composite PK** | `hazard_matrix` table |
+| **CHECK Constraints** | All tables — data integrity |
+| **Foreign Keys** | All relationships with CASCADE/RESTRICT |
+
+---
+
+##  Testing
+
+### API Tests (14/14 passing)
+```bash
+# Health check
+curl https://symbx.onrender.com/api/health
+
+# Chemicals (17 rows)
+curl https://symbx.onrender.com/api/master/chemicals
+
+# Listings with composition
+curl https://symbx.onrender.com/api/listings
+```
+
+### Frontend Tests
+- Login flow 
+- Dashboard loads 
+- Smart search 
+- Match buyers 
+- Processor finder 
+
+---
+
+##  Deployment
+
+### Backend → Render (Free)
+1. Push to GitHub
+2. Connect repo to Render
+3. Set build command: `npm install`
+4. Set start command: `node seed.js && node index.js`
+5. Add env vars: `PORT`, `JWT_SECRET`, `DB_STORAGE`
+
+### Frontend → Netlify (Free)
+1. Connect repo to Netlify
+2. Base directory: `client`
+3. Build command: `npm run build`
+4. Add env var: `VITE_API_URL=https://your-backend.onrender.com/api`
+
+See `DEPLOYMENT.md` for detailed guide.
+
+---
+
+##  Educational Value
+
+This project demonstrates:
+- **DBMS Fundamentals**: Normalization, constraints, relationships
+- **Advanced SQL**: Complex queries, transactions, performance
+- **Full-Stack Development**: API design, authentication, state management
+- **Industrial Symbiosis**: Real-world sustainability application
+- **Modern Tooling**: Vite, TailwindCSS, Git workflows
+
+Perfect for DBMS course presentations or portfolio projects.
+
+---
+
+##  Contributing
+
+1. Fork the repo
+2. Create feature branch
+3. Push changes
+4. Open Pull Request
+
+---
+
+##  License
+
+MIT License — feel free to use for educational or commercial purposes.
+
+---
+
+**Built with  for a sustainable industrial future**
+
+##  Architecture
 
 | Layer | Tech | Notes |
 |-------|------|-------|
@@ -36,7 +203,7 @@ npm run dev     # Starts on http://localhost:3000 (proxied to backend)
 | Backend | Express + Sequelize | RESTful, JWT auth, DB transactions |
 | Database | SQLite (dev) / PostgreSQL (prod) | 7 tables, complex JOINs |
 
-## Database Schema (7 Tables)
+##  Database Schema (7 Tables)
 
 | Table | Purpose | Link Type |
 |-------|---------|-----------|
