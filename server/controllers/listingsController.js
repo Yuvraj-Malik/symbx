@@ -94,61 +94,105 @@ exports.createListing = (req, res) => {
 // GET /api/listings — fetch all active listings with composition + criteria + user info
 exports.getListings = (req, res) => {
   try {
-    // Step 1: Get all active listings with user info (JOIN)
+    // Get all active listings with user info
     const listings = db.prepare(`
-      SELECT
-        l.id, l.user_id, l.type, l.material_name, l.total_quantity,
-        l.status, l.created_at AS createdAt,
-        u.name AS user_name, u.industry_type, u.location
+      SELECT l.id, l.user_id, l.type, l.material_name, l.total_quantity,
+             l.status, l.created_at AS createdAt,
+             u.name AS userName, u.industry_type, u.location
       FROM listings l
       JOIN users u ON u.id = l.user_id
       WHERE l.status = 'ACTIVE'
       ORDER BY l.created_at DESC
     `).all();
 
-    // Step 2: Get all composition rows for these listings
+    // Get all composition rows for these listings
     const allComposition = db.prepare(`
       SELECT bc.listing_id, bc.chem_id, bc.percentage,
-             c.name AS chem_name, c.hazard_level
+             c.name AS chemName, c.hazard_level
       FROM batch_composition bc
       JOIN chemicals c ON c.id = bc.chem_id
-      WHERE bc.listing_id IN (SELECT id FROM listings WHERE status = 'ACTIVE')
+      WHERE bc.listing_id IN (
+        SELECT id FROM listings WHERE status = 'ACTIVE'
+      )
       ORDER BY bc.percentage DESC
     `).all();
 
-    // Step 3: Get all criteria rows for these listings
+    // Get all criteria rows for these listings
     const allCriteria = db.prepare(`
       SELECT ac.listing_id, ac.chem_id, ac.min_percentage, ac.max_percentage,
-             c.name AS chem_name, c.hazard_level
+             c.name AS chemName, c.hazard_level
       FROM acceptance_criteria ac
       JOIN chemicals c ON c.id = ac.chem_id
-      WHERE ac.listing_id IN (SELECT id FROM listings WHERE status = 'ACTIVE')
+      WHERE ac.listing_id IN (
+        SELECT id FROM listings WHERE status = 'ACTIVE'
+      )
+      ORDER BY c.name ASC
     `).all();
 
-    // Step 4: Group composition and criteria by listing_id
-    const compMap = {};
-    for (const row of allComposition) {
-      if (!compMap[row.listing_id]) compMap[row.listing_id] = [];
-      compMap[row.listing_id].push(row);
-    }
-
-    const critMap = {};
-    for (const row of allCriteria) {
-      if (!critMap[row.listing_id]) critMap[row.listing_id] = [];
-      critMap[row.listing_id].push(row);
-    }
-
-    // Step 5: Assemble final response
-    const result = listings.map((l) => ({
-      ...l,
-      user: { name: l.user_name, industry_type: l.industry_type, location: l.location },
-      composition: compMap[l.id] || [],
-      criteria: critMap[l.id] || [],
+    // Attach composition and criteria to each listing
+    const listingsWithDetails = listings.map(listing => ({
+      ...listing,
+      composition: allComposition.filter(comp => comp.listing_id === listing.id),
+      criteria: allCriteria.filter(crit => crit.listing_id === listing.id),
+      user: { name: listing.userName, industry_type: listing.industry_type, location: listing.location }
     }));
 
-    return res.json(result);
+    return res.json(listingsWithDetails);
   } catch (err) {
     console.error("getListings error:", err);
     return res.status(500).json({ error: "Failed to fetch listings." });
+  }
+};
+
+exports.getMyListings = (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get user's listings
+    const listings = db.prepare(`
+      SELECT l.id, l.user_id, l.type, l.material_name, l.total_quantity,
+             l.status, l.created_at AS createdAt,
+             u.name AS userName, u.industry_type, u.location
+      FROM listings l
+      JOIN users u ON u.id = l.user_id
+      WHERE l.user_id = ? AND l.status = 'ACTIVE'
+      ORDER BY l.created_at DESC
+    `).all(userId);
+
+    // Get composition and criteria for user's listings
+    const allComposition = db.prepare(`
+      SELECT bc.listing_id, bc.chem_id, bc.percentage,
+             c.name AS chemName, c.hazard_level
+      FROM batch_composition bc
+      JOIN chemicals c ON c.id = bc.chem_id
+      WHERE bc.listing_id IN (
+        SELECT id FROM listings WHERE user_id = ? AND status = 'ACTIVE'
+      )
+      ORDER BY bc.percentage DESC
+    `).all(userId);
+
+    const allCriteria = db.prepare(`
+      SELECT ac.listing_id, ac.chem_id, ac.min_percentage, ac.max_percentage,
+             c.name AS chemName, c.hazard_level
+      FROM acceptance_criteria ac
+      JOIN chemicals c ON c.id = ac.chem_id
+      WHERE ac.listing_id IN (
+        SELECT id FROM listings WHERE user_id = ? AND status = 'ACTIVE'
+      )
+      ORDER BY c.name ASC
+    `).all(userId);
+
+    // Attach composition and criteria
+    const listingsWithDetails = listings.map(listing => ({
+      ...listing,
+      composition: allComposition.filter(comp => comp.listing_id === listing.id),
+      criteria: allCriteria.filter(crit => crit.listing_id === listing.id),
+      user: { name: listing.userName, industry_type: listing.industry_type, location: listing.location }
+    }));
+
+    res.json(listingsWithDetails);
+  } catch (err) {
+    console.error("Failed to fetch user listings:", err);
+    res.status(500).json({ error: "Failed to fetch your listings." });
   }
 };

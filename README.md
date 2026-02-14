@@ -29,10 +29,12 @@ Symbio-Exchange is a B2B marketplace where industries can:
 - **Frontend**: https://symbx.netlify.app/
 - **Backend API**: https://symbx.onrender.com/api
 
-**Login Credentials** (all same password):
-- Email: `ntpc@example.com` | Password: `password123`
-- Email: `ultratech@example.com` | Password: `password123`
-- Email: `tata@example.com` | Password: `password123`
+**Login Credentials** (all same password: `industry123`):
+- Email: `ntpc.dadri@ntpc.co.in` | Password: `industry123`
+- Email: `procurement@ultratechcement.com` | Password: `industry123`
+- Email: `waste.management@tatasteel.com` | Password: `industry123`
+- Email: `info@greenprocess.in` | Password: `industry123`
+- Email: `waste@drreddys.com` | Password: `industry123`
 
 ---
 

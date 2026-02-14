@@ -6,7 +6,13 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "seed": "node seed.js"
+    "seed": "node seed-enhanced.js",
+    "seed-basic": "node seed.js",
+    "seed-sql": "sqlite3 database.sqlite < run-seed.sql",
+    "seed-sql-interactive": "sqlite3 database.sqlite",
+    "demo": "sqlite3 database.sqlite < demo.sql",
+    "demo-interactive": "sqlite3 database.sqlite",
+    "demo-queries": "sqlite3 database.sqlite \"SELECT 'DEMO: Fly Ash Matches'; SELECT d.material_name, u.name as buyer FROM listings d JOIN users u ON u.id = d.user_id WHERE d.type = 'DEMAND' AND EXISTS (SELECT 1 FROM acceptance_criteria ac JOIN batch_composition mc ON mc.chem_id = ac.chem_id AND mc.listing_id = 1 WHERE ac.listing_id = d.id AND (ac.min_percentage IS NULL OR mc.percentage >= ac.min_percentage) AND (ac.max_percentage IS NULL OR mc.percentage <= ac.max_percentage));\""
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
