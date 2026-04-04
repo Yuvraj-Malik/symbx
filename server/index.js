@@ -32,7 +32,7 @@ app.use("/api/utils", utilsRoutes);
 app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 
 // --- Initialize DB and Start Server ---
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 try {
   initDb(); // Creates all 7 tables from schema.sql
