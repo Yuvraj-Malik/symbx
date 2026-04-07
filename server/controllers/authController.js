@@ -6,6 +6,8 @@ const jwt = require("jsonwebtoken");
 const db = require("../config/database");
 require("dotenv").config();
 
+const JWT_SECRET = process.env.JWT_SECRET || "symbio_exchange_dev_secret_change_in_prod";
+
 // POST /api/auth/register
 exports.register = async (req, res) => {
   try {
@@ -66,7 +68,7 @@ exports.login = async (req, res) => {
 
     const token = jwt.sign(
       { id: user.id, email: user.email },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       { expiresIn: "24h" }
     );
 

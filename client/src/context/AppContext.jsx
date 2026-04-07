@@ -22,7 +22,10 @@ export function AppProvider({ children }) {
 
     api.get("/master/chemicals")
       .then((res) => setChemicals(res.data))
-      .catch((err) => console.error("Failed to load chemicals:", err))
+      .catch((err) => {
+        console.error("Failed to load chemicals:", err);
+        showToast("Unable to load chemicals. Some search features may be unavailable.", "error");
+      })
       .finally(() => setLoading(false));
   }, []);
 

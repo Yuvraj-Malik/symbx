@@ -9,6 +9,10 @@
 // ============================================================
 const db = require("../config/database");
 
+function badRequest(res, message) {
+  return res.status(400).json({ error: message });
+}
+
 // ============================================================
 // POST /api/search/match
 //
@@ -26,7 +30,7 @@ exports.matchListings = (req, res) => {
     const { filters } = req.body;
 
     if (!filters || !filters.length) {
-      return res.status(400).json({ error: "At least one filter is required." });
+      return badRequest(res, "At least one filter is required.");
     }
 
     const allowedOps = ["<", ">", "<=", ">=", "="];
@@ -34,9 +38,18 @@ exports.matchListings = (req, res) => {
     const params = [];
 
     // Build one EXISTS subquery per filter
-    filters.forEach((f) => {
+    for (const f of filters) {
+      if (!f || !f.chemId || f.value === "" || f.value === undefined) {
+        return badRequest(res, "Each filter must include a chemical and value.");
+      }
+
       if (!allowedOps.includes(f.operator)) {
-        throw new Error(`Invalid operator: ${f.operator}`);
+        return badRequest(res, `Invalid operator: ${f.operator}`);
+      }
+
+      const numericValue = Number(f.value);
+      if (Number.isNaN(numericValue)) {
+        return badRequest(res, "Filter value must be a number.");
       }
 
       // Each filter becomes:
@@ -50,8 +63,8 @@ exports.matchListings = (req, res) => {
             AND bc.percentage ${f.operator} ?
         )
       `);
-      params.push(f.chemId, Number(f.value));
-    });
+      params.push(f.chemId, numericValue);
+    }
 
     const sql = `
       SELECT
@@ -124,7 +137,21 @@ exports.matchBuyers = (req, res) => {
     const { supplyListingId } = req.body;
 
     if (!supplyListingId) {
-      return res.status(400).json({ error: "supplyListingId is required." });
+      return badRequest(res, "supplyListingId is required.");
+    }
+
+    const supplyListing = db.prepare(`
+      SELECT id, type, status, material_name
+      FROM listings
+      WHERE id = ?
+    `).get(supplyListingId);
+
+    if (!supplyListing) {
+      return res.status(404).json({ error: "Supply listing not found." });
+    }
+
+    if (supplyListing.type !== "OFFER") {
+      return badRequest(res, "Match buyers is only available for OFFER listings.");
     }
 
     const matches = db.prepare(`
@@ -201,9 +228,15 @@ exports.matchBuyers = (req, res) => {
     return res.json({
       matches,
       hazardWarnings,
+      supplyListing: {
+        id: supplyListing.id,
+        type: supplyListing.type,
+        status: supplyListing.status,
+        material_name: supplyListing.material_name,
+      },
       note: hazardWarnings.length > 0
         ? "Transport hazard detected — some chemicals in this waste are incompatible."
-        : null,
+        : (matches.length === 0 ? "No compatible buyers found for this supply listing." : null),
     });
   } catch (err) {
     console.error("matchBuyers error:", err);
@@ -231,7 +264,18 @@ exports.findProcessors = (req, res) => {
     const { inputChemId, outputChemId } = req.body;
 
     if (!inputChemId || !outputChemId) {
-      return res.status(400).json({ error: "inputChemId and outputChemId are required." });
+      return badRequest(res, "inputChemId and outputChemId are required.");
+    }
+
+    const inputChem = db.prepare(`SELECT id, name FROM chemicals WHERE id = ?`).get(inputChemId);
+    const outputChem = db.prepare(`SELECT id, name FROM chemicals WHERE id = ?`).get(outputChemId);
+
+    if (!inputChem || !outputChem) {
+      return res.status(404).json({ error: "One or both chemicals were not found." });
+    }
+
+    if (inputChemId === outputChemId) {
+      return badRequest(res, "Input and output chemicals must be different.");
     }
 
     // 1-hop: direct conversion X → Y
@@ -284,6 +328,9 @@ exports.findProcessors = (req, res) => {
       directPaths,
       twoHopPaths,
       totalRoutes: directPaths.length + twoHopPaths.length,
+      note: directPaths.length === 0 && twoHopPaths.length === 0
+        ? "No processing routes found between the selected chemicals."
+        : null,
     });
   } catch (err) {
     console.error("findProcessors error:", err);

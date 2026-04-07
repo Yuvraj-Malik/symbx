@@ -5,6 +5,8 @@
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
+const JWT_SECRET = process.env.JWT_SECRET || "symbio_exchange_dev_secret_change_in_prod";
+
 function authMiddleware(req, res, next) {
   const header = req.headers.authorization;
 
@@ -15,7 +17,7 @@ function authMiddleware(req, res, next) {
   const token = header.split(" ")[1];
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded; // { id, email }
     next();
   } catch (err) {
