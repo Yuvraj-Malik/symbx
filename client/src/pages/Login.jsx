@@ -17,6 +17,10 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    if (!email.trim() || !password) {
+      setError("Email and password are required.");
+      return;
+    }
     setLoading(true);
     try {
       const res = await api.post("/auth/login", { email, password });
@@ -24,7 +28,7 @@ export default function Login() {
       showToast(`Welcome back, ${res.data.user.name}!`, "success");
       navigate("/");
     } catch (err) {
-      setError(err.response?.data?.error || "Login failed.");
+      setError(err.response?.data?.error || "Login failed. Please check your credentials and try again.");
     } finally {
       setLoading(false);
     }

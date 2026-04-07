@@ -56,7 +56,7 @@ export default function SmartSearch() {
       setSearched(true);
       setParseNote("");
     } catch (err) {
-      setParseNote(err.response?.data?.error || "Search failed.");
+      setParseNote(err.response?.data?.error || "Search failed. Please check the server connection and try again.");
     } finally {
       setSearching(false);
     }

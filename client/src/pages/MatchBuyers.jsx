@@ -21,6 +21,7 @@ export default function MatchBuyers() {
 
   const handleSearch = async () => {
     if (!supplyId) { setError("Enter a supply listing ID."); return; }
+    if (Number.isNaN(Number(supplyId))) { setError("Supply listing ID must be a number."); return; }
     setLoading(true);
     setError("");
     setResults(null);
@@ -28,7 +29,7 @@ export default function MatchBuyers() {
       const res = await api.post("/search/match-buyers", { supplyListingId: Number(supplyId) });
       setResults(res.data);
     } catch (err) {
-      setError(err.response?.data?.error || "Matching failed.");
+      setError(err.response?.data?.error || "Matching failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -87,7 +88,7 @@ export default function MatchBuyers() {
               <div className="grid gap-4">{[...Array(2)].map((_, i) => <SkeletonCard key={i} />)}</div>
             ) : results.matches?.length === 0 ? (
               <EmptyState icon={FlaskConical} title="No matching buyers"
-                description="No demand listings have acceptance criteria that your waste composition satisfies." />
+                description={results.note || "No demand listings have acceptance criteria that your waste composition satisfies."} />
             ) : (
               <div className="grid gap-4">
                 {results.matches.map((m, i) => (

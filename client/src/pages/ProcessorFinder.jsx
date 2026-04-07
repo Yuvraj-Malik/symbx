@@ -24,7 +24,7 @@ export default function ProcessorFinder() {
       const res = await api.post("/search/find-processors", { inputChemId: inputChem, outputChemId: outputChem });
       setResults(res.data);
     } catch (err) {
-      setError(err.response?.data?.error || "Search failed.");
+      setError(err.response?.data?.error || "Search failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -82,7 +82,7 @@ export default function ProcessorFinder() {
 
             {results.totalRoutes === 0 ? (
               <EmptyState icon={Route} title="No processing routes"
-                description="No registered processor can convert between these chemicals." />
+                description={results.note || "No registered processor can convert between these chemicals."} />
             ) : (
               <div className="space-y-4">
                 {/* Direct (1-hop) paths */}
