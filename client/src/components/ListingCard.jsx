@@ -29,7 +29,12 @@ export default function ListingCard({ listing, index = 0 }) {
             {isOffer ? <Factory className="w-5 h-5" /> : <Package className="w-5 h-5" />}
           </div>
           <div>
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white">{listing.material_name}</h3>
+            <Link
+              to={`/listings/${listing.id}`}
+              className="text-base font-semibold text-gray-900 dark:text-white hover:text-green-600 dark:hover:text-green-400"
+            >
+              {listing.material_name}
+            </Link>
             <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
               <span>{userName}</span>
               {industry && <span>· {industry}</span>}
@@ -89,9 +94,16 @@ export default function ListingCard({ listing, index = 0 }) {
       )}
 
       {/* Hover action hint */}
+      <Link
+        to={`/listings/${listing.id}`}
+        className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400"
+      >
+        View details <ChevronRight className="w-3 h-3" />
+      </Link>
+
       {isOffer && listing.id && (
         <Link to={`/match-buyers?supplyId=${listing.id}`}
-          className="mt-4 flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity">
+          className="mt-2 flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity">
           Find matching buyers <ChevronRight className="w-3 h-3" />
         </Link>
       )}

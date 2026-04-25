@@ -12,6 +12,16 @@
 - **Authentication**: JWT + bcryptjs
 - **Environment**: dotenv for configuration
 
+### DBMS Course Compliance (Oracle PL/SQL)
+
+For professor evaluation requirements (procedures, functions, cursors, triggers), use the Oracle pack in [server/oracle/README.md](oracle/README.md).
+
+It includes:
+- PL/SQL procedures for offer-decision workflow
+- PL/SQL functions including an explicit cursor-based compatibility function
+- Trigger for automatic timestamp updates
+- End-to-end SQL demo script for acceptance flow
+
 ---
 
 ## 📁 Folder Structure

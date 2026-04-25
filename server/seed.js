@@ -859,6 +859,123 @@ async function seed() {
     console.log("Inserted 20 DEMAND listings with 90 acceptance_criteria rows.");
 
     // --------------------------------------------------------
+    // Step 5B: Ensure each company has >= 2 OFFER and >= 2 DEMAND
+    // --------------------------------------------------------
+    const countByType = db.prepare(`
+      SELECT COUNT(*) AS cnt
+      FROM listings
+      WHERE user_id = ? AND type = ?
+    `);
+
+    const addCoverageListings = db.transaction(() => {
+      const offerTemplates = [
+        {
+          materialName: "Demo Recovered Fly Ash",
+          quantity: 1600,
+          composition: [
+            ["SIO2", 55.0],
+            ["AL2O3", 22.0],
+            ["FE2O3", 7.0],
+            ["CAO", 4.0],
+            ["MGO", 2.0],
+          ],
+        },
+        {
+          materialName: "Demo Industrial Mineral Mix",
+          quantity: 1400,
+          composition: [
+            ["CAO", 38.0],
+            ["SIO2", 30.0],
+            ["AL2O3", 12.0],
+            ["MGO", 6.0],
+            ["FE2O3", 3.0],
+          ],
+        },
+      ];
+
+      const demandTemplates = [
+        {
+          materialName: "Demo Cement Blend Feed",
+          quantity: 1200,
+          criteria: [
+            ["SIO2", 45, null],
+            ["AL2O3", 15, null],
+            ["FE2O3", null, 10],
+            ["CAO", null, 8],
+            ["MGO", null, 6],
+          ],
+        },
+        {
+          materialName: "Demo High Calcium Input",
+          quantity: 1100,
+          criteria: [
+            ["CAO", 30, null],
+            ["SIO2", 20, 45],
+            ["AL2O3", null, 20],
+            ["MGO", null, 8],
+            ["FE2O3", null, 8],
+          ],
+        },
+      ];
+
+      for (let userId = 1; userId <= userData.length; userId++) {
+        let offerCount = countByType.get(userId, "OFFER").cnt;
+        let demandCount = countByType.get(userId, "DEMAND").cnt;
+
+        while (offerCount < 2) {
+          const idx = (offerCount % offerTemplates.length);
+          const template = offerTemplates[idx];
+          const name = `${template.materialName} (Coverage U${userId}-O${offerCount + 1})`;
+          const offer = insertListing.run(userId, "OFFER", name, template.quantity);
+          for (const comp of template.composition) {
+            insertComp.run(offer.lastInsertRowid, comp[0], comp[1]);
+          }
+          offerCount++;
+        }
+
+        while (demandCount < 2) {
+          const idx = (demandCount % demandTemplates.length);
+          const template = demandTemplates[idx];
+          const name = `${template.materialName} (Coverage U${userId}-D${demandCount + 1})`;
+          const demand = insertListing.run(userId, "DEMAND", name, template.quantity);
+          for (const rule of template.criteria) {
+            insertCrit.run(demand.lastInsertRowid, rule[0], rule[1], rule[2]);
+          }
+          demandCount++;
+        }
+      }
+    });
+
+    addCoverageListings();
+
+    const coverageGaps = db.prepare(`
+      SELECT
+        u.id,
+        SUM(CASE WHEN l.type = 'OFFER' THEN 1 ELSE 0 END) AS offer_count,
+        SUM(CASE WHEN l.type = 'DEMAND' THEN 1 ELSE 0 END) AS demand_count
+      FROM users u
+      LEFT JOIN listings l ON l.user_id = u.id
+      GROUP BY u.id
+      HAVING offer_count < 2 OR demand_count < 2
+    `).all();
+
+    if (coverageGaps.length > 0) {
+      throw new Error(`Coverage rule failed for users: ${coverageGaps.map((r) => r.id).join(", ")}`);
+    }
+
+    const listingTotals = db.prepare(`
+      SELECT
+        SUM(CASE WHEN type = 'OFFER' THEN 1 ELSE 0 END) AS offers,
+        SUM(CASE WHEN type = 'DEMAND' THEN 1 ELSE 0 END) AS demands
+      FROM listings
+    `).get();
+
+    console.log(
+      `Coverage rule satisfied: ${userData.length} users each have >= 2 OFFER and >= 2 DEMAND ` +
+      `(totals: ${listingTotals.offers} OFFER, ${listingTotals.demands} DEMAND).`
+    );
+
+    // --------------------------------------------------------
     // Step 6: INSERT INTO process_capabilities (3 rows)
     // GreenProcess Inc. (user_id=4) can convert chemicals
     // --------------------------------------------------------
@@ -1102,6 +1219,15 @@ async function seed() {
     });
     insertAllProcs();
     console.log(`Inserted ${processCapabilities.length} rows into 'process_capabilities' table.`);
+
+    const decisionStatusSummary = db.prepare(`
+      SELECT final_status, COUNT(*) AS count
+      FROM offer_decisions
+      GROUP BY final_status
+      ORDER BY final_status
+    `).all();
+
+    console.log("Initialized offer decision workflow table with status buckets:", decisionStatusSummary);
 
     // --------------------------------------------------------
     // Summary

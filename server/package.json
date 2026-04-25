@@ -7,7 +7,7 @@
     "start": "node index.js",
     "predev": "kill-port 5001 || exit 0",
     "dev": "node --watch index.js",
-    "seed": "node seed-enhanced.js",
+    "seed": "node seed.js",
     "seed-basic": "node seed.js",
     "seed-sql": "sqlite3 database.sqlite < run-seed.sql",
     "seed-sql-interactive": "sqlite3 database.sqlite",

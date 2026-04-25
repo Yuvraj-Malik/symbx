@@ -12,8 +12,13 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     const stored = localStorage.getItem("user");
-    if (stored) {
+    const token = localStorage.getItem("token");
+
+    if (stored && token) {
       try { setUser(JSON.parse(stored)); } catch { /* ignore */ }
+    } else if (stored && !token) {
+      // Prevent stale UI state where user exists but token is missing.
+      localStorage.removeItem("user");
     }
 
     const dark = localStorage.getItem("darkMode") === "true";
@@ -27,6 +32,17 @@ export function AppProvider({ children }) {
         showToast("Unable to load chemicals. Some search features may be unavailable.", "error");
       })
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    const onUnauthorized = () => {
+      setUser(null);
+      setToast({ message: "Session expired. Please sign in again.", type: "error" });
+      setTimeout(() => setToast(null), 3500);
+    };
+
+    window.addEventListener("auth:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("auth:unauthorized", onUnauthorized);
   }, []);
 
   const toggleDarkMode = () => {

@@ -19,12 +19,14 @@ export default function Dashboard() {
   useEffect(() => {
     const loadData = async () => {
       try {
+        const token = localStorage.getItem("token");
+
         // Load all listings
         const listingsRes = await api.get("/listings");
         setListings(listingsRes.data);
 
         // Load user's listings
-        if (user) {
+        if (user && token) {
           const myListingsRes = await api.get("/listings/my");
           setMyListings(myListingsRes.data);
 
@@ -48,9 +50,14 @@ export default function Dashboard() {
           
           const matchResults = await Promise.all(matchPromises);
           setMatches(matchResults);
+        } else {
+          setMyListings([]);
+          setMatches([]);
         }
       } catch (err) {
-        console.error("Failed to load dashboard data:", err);
+        if (err?.response?.status !== 401) {
+          console.error("Failed to load dashboard data:", err);
+        }
       } finally {
         setLoading(false);
       }
