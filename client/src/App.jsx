@@ -7,6 +7,7 @@ import PostListing from "./pages/PostListing";
 import SmartSearch from "./pages/SmartSearch";
 import MatchBuyers from "./pages/MatchBuyers";
 import ProcessorFinder from "./pages/ProcessorFinder";
+import ListingDetails from "./pages/ListingDetails";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import { useApp } from "./context/AppContext";
@@ -14,6 +15,7 @@ import { useApp } from "./context/AppContext";
 export default function App() {
   const { user, loading } = useApp();
   const location = useLocation();
+  const requireAuth = (element) => (user ? element : <Navigate to="/login" replace />);
 
   if (loading) {
     return (
@@ -33,11 +35,12 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/search" element={<SmartSearch />} />
-            <Route path="/match-buyers" element={<MatchBuyers />} />
-            <Route path="/processors" element={<ProcessorFinder />} />
-            <Route path="/post" element={user ? <PostListing /> : <Navigate to="/login" />} />
+            <Route path="/" element={requireAuth(<Dashboard />)} />
+            <Route path="/search" element={requireAuth(<SmartSearch />)} />
+            <Route path="/match-buyers" element={requireAuth(<MatchBuyers />)} />
+            <Route path="/processors" element={requireAuth(<ProcessorFinder />)} />
+            <Route path="/post" element={requireAuth(<PostListing />)} />
+            <Route path="/listings/:id" element={requireAuth(<ListingDetails />)} />
             <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
             <Route path="/register" element={!user ? <Register /> : <Navigate to="/" />} />
           </Routes>

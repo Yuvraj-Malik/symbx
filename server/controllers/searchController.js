@@ -337,3 +337,297 @@ exports.findProcessors = (req, res) => {
     return res.status(500).json({ error: err.message || "Processor search failed." });
   }
 };
+
+// ============================================================
+// OFFER DECISION WORKFLOW (two-step handshake)
+//
+// 1) createDecision:
+//    Creates or fetches a decision row for OFFER/DEMAND pair
+//
+// 2) respondDecision:
+//    Seller or buyer submits ACCEPTED / REJECTED
+//    - both ACCEPTED   => close both listings
+//    - any REJECTED    => keep listings ACTIVE, mark final as REJECTED
+//
+// 3) getOfferDecisions:
+//    View decision states for one offer
+// ============================================================
+
+const getListingById = db.prepare(`
+  SELECT id, user_id, type, status, material_name
+  FROM listings
+  WHERE id = ?
+`);
+
+const getPairDecision = db.prepare(`
+  SELECT *
+  FROM offer_decisions
+  WHERE offer_listing_id = ? AND demand_listing_id = ?
+`);
+
+const insertPairDecision = db.prepare(`
+  INSERT INTO offer_decisions (
+    offer_listing_id, demand_listing_id,
+    seller_user_id, buyer_user_id,
+    seller_decision, buyer_decision, final_status
+  )
+  VALUES (?, ?, ?, ?, 'PENDING', 'PENDING', 'OPEN')
+`);
+
+const updateSellerDecision = db.prepare(`
+  UPDATE offer_decisions
+  SET seller_decision = ?, final_status = ?
+  WHERE id = ?
+`);
+
+const updateBuyerDecision = db.prepare(`
+  UPDATE offer_decisions
+  SET buyer_decision = ?, final_status = ?
+  WHERE id = ?
+`);
+
+const closeListing = db.prepare(`
+  UPDATE listings
+  SET status = 'CLOSED'
+  WHERE id = ? AND status = 'ACTIVE'
+`);
+
+const getMatchedCriteriaForPair = db.prepare(`
+  SELECT
+    COUNT(ac.id) AS matched_criteria,
+    total_crit.total AS total_criteria
+  FROM listings demand
+  JOIN acceptance_criteria ac
+    ON ac.listing_id = demand.id
+  JOIN batch_composition mc
+    ON mc.listing_id = ?
+    AND mc.chem_id = ac.chem_id
+  JOIN (
+    SELECT listing_id, COUNT(*) AS total
+    FROM acceptance_criteria
+    GROUP BY listing_id
+  ) total_crit
+    ON total_crit.listing_id = demand.id
+  WHERE demand.id = ?
+    AND demand.type = 'DEMAND'
+    AND demand.status = 'ACTIVE'
+    AND (ac.min_percentage IS NULL OR mc.percentage >= ac.min_percentage)
+    AND (ac.max_percentage IS NULL OR mc.percentage <= ac.max_percentage)
+  GROUP BY total_crit.total
+`);
+
+const getHazardCountForOffer = db.prepare(`
+  SELECT COUNT(*) AS cnt
+  FROM batch_composition mc1
+  JOIN batch_composition mc2
+    ON mc1.listing_id = mc2.listing_id
+    AND mc1.chem_id < mc2.chem_id
+  JOIN hazard_matrix hm
+    ON hm.chem_id_1 = mc1.chem_id
+    AND hm.chem_id_2 = mc2.chem_id
+    AND hm.is_incompatible = 1
+  WHERE mc1.listing_id = ?
+`);
+
+const listOfferDecisions = db.prepare(`
+  SELECT
+    od.id,
+    od.offer_listing_id,
+    od.demand_listing_id,
+    od.seller_user_id,
+    od.buyer_user_id,
+    od.seller_decision,
+    od.buyer_decision,
+    od.final_status,
+    od.created_at,
+    od.updated_at,
+    d.material_name AS demand_material_name,
+    d.status AS demand_status,
+    u.name AS buyer_name,
+    u.industry_type AS buyer_industry,
+    u.location AS buyer_location
+  FROM offer_decisions od
+  JOIN listings d ON d.id = od.demand_listing_id
+  JOIN users u ON u.id = od.buyer_user_id
+  WHERE od.offer_listing_id = ?
+  ORDER BY od.updated_at DESC
+`);
+
+exports.createDecision = (req, res) => {
+  try {
+    const actorUserId = req.user.id;
+    const offerListingId = Number(req.body.offerListingId);
+    const demandListingId = Number(req.body.demandListingId);
+
+    if (!offerListingId || !demandListingId) {
+      return badRequest(res, "offerListingId and demandListingId are required.");
+    }
+
+    const offer = getListingById.get(offerListingId);
+    const demand = getListingById.get(demandListingId);
+
+    if (!offer || !demand) {
+      return res.status(404).json({ error: "Offer or demand listing not found." });
+    }
+    if (offer.type !== "OFFER" || demand.type !== "DEMAND") {
+      return badRequest(res, "Pair must be OFFER + DEMAND.");
+    }
+    if (offer.status !== "ACTIVE" || demand.status !== "ACTIVE") {
+      return badRequest(res, "Only ACTIVE listings can enter decision workflow.");
+    }
+
+    if (actorUserId !== offer.user_id && actorUserId !== demand.user_id) {
+      return res.status(403).json({ error: "Only offer owner or demand owner can create decisions." });
+    }
+
+    const criteriaCheck = getMatchedCriteriaForPair.get(offerListingId, demandListingId);
+    if (!criteriaCheck || criteriaCheck.matched_criteria !== criteriaCheck.total_criteria) {
+      return badRequest(res, "Selected offer/demand pair is not fully compatible by acceptance criteria.");
+    }
+
+    const hazards = getHazardCountForOffer.get(offerListingId);
+
+    let decision = getPairDecision.get(offerListingId, demandListingId);
+    if (!decision) {
+      insertPairDecision.run(offerListingId, demandListingId, offer.user_id, demand.user_id);
+      decision = getPairDecision.get(offerListingId, demandListingId);
+    }
+
+    return res.status(201).json({
+      message: "Decision workflow initialized.",
+      decision,
+      hazardWarning:
+        hazards && hazards.cnt > 0
+          ? "Offer has incompatible chemical pair warnings. Review before final transport."
+          : null,
+    });
+  } catch (err) {
+    console.error("createDecision error:", err);
+    return res.status(500).json({ error: err.message || "Failed to create decision." });
+  }
+};
+
+exports.respondDecision = (req, res) => {
+  try {
+    const actorUserId = req.user.id;
+    const offerListingId = Number(req.body.offerListingId);
+    const demandListingId = Number(req.body.demandListingId);
+    const rawDecision = req.body.decision;
+
+    if (!offerListingId || !demandListingId || !rawDecision) {
+      return badRequest(res, "offerListingId, demandListingId, and decision are required.");
+    }
+
+    const decisionValue = String(rawDecision).toUpperCase();
+    if (!["ACCEPTED", "REJECTED"].includes(decisionValue)) {
+      return badRequest(res, "decision must be ACCEPTED or REJECTED.");
+    }
+
+    const applyDecision = db.transaction(() => {
+      const row = getPairDecision.get(offerListingId, demandListingId);
+      if (!row) {
+        throw new Error("Decision workflow not initialized for this pair.");
+      }
+      if (row.final_status !== "OPEN") {
+        throw new Error("Decision is already finalized.");
+      }
+
+      const offer = getListingById.get(offerListingId);
+      const demand = getListingById.get(demandListingId);
+      if (!offer || !demand) {
+        throw new Error("Offer or demand listing not found.");
+      }
+      if (offer.status !== "ACTIVE" || demand.status !== "ACTIVE") {
+        throw new Error("Cannot finalize decisions for non-ACTIVE listings.");
+      }
+
+      const isSeller = actorUserId === row.seller_user_id;
+      const isBuyer = actorUserId === row.buyer_user_id;
+      if (!isSeller && !isBuyer) {
+        throw new Error("Only seller or buyer can respond to this decision.");
+      }
+
+      const nextSellerDecision = isSeller ? decisionValue : row.seller_decision;
+      const nextBuyerDecision = isBuyer ? decisionValue : row.buyer_decision;
+
+      let nextFinalStatus = "OPEN";
+      if (nextSellerDecision === "REJECTED" || nextBuyerDecision === "REJECTED") {
+        nextFinalStatus = "REJECTED";
+      } else if (nextSellerDecision === "ACCEPTED" && nextBuyerDecision === "ACCEPTED") {
+        nextFinalStatus = "ACCEPTED";
+      }
+
+      if (isSeller) {
+        updateSellerDecision.run(nextSellerDecision, nextFinalStatus, row.id);
+      } else {
+        updateBuyerDecision.run(nextBuyerDecision, nextFinalStatus, row.id);
+      }
+
+      if (nextFinalStatus === "ACCEPTED") {
+        const closedOffer = closeListing.run(offerListingId);
+        const closedDemand = closeListing.run(demandListingId);
+        if (closedOffer.changes !== 1 || closedDemand.changes !== 1) {
+          throw new Error("Failed to close accepted listings atomically.");
+        }
+      }
+
+      return getPairDecision.get(offerListingId, demandListingId);
+    });
+
+    const updated = applyDecision();
+
+    return res.json({
+      message: "Decision recorded successfully.",
+      decision: updated,
+      outcome:
+        updated.final_status === "ACCEPTED"
+          ? "Both parties accepted. Offer and demand listings are now CLOSED."
+          : updated.final_status === "REJECTED"
+            ? "Rejected by one party. Listings remain ACTIVE."
+            : "Waiting for the other party decision.",
+    });
+  } catch (err) {
+    console.error("respondDecision error:", err);
+    if (err.message && (
+      err.message.includes("not initialized") ||
+      err.message.includes("already finalized") ||
+      err.message.includes("non-ACTIVE") ||
+      err.message.includes("Only seller") ||
+      err.message.includes("not found")
+    )) {
+      return res.status(400).json({ error: err.message });
+    }
+    return res.status(500).json({ error: err.message || "Failed to update decision." });
+  }
+};
+
+exports.getOfferDecisions = (req, res) => {
+  try {
+    const actorUserId = req.user.id;
+    const offerListingId = Number(req.params.offerListingId);
+
+    if (!offerListingId) {
+      return badRequest(res, "offerListingId is required.");
+    }
+
+    const offer = getListingById.get(offerListingId);
+    if (!offer || offer.type !== "OFFER") {
+      return res.status(404).json({ error: "Offer listing not found." });
+    }
+
+    if (offer.user_id !== actorUserId) {
+      return res.status(403).json({ error: "Only offer owner can view decision list." });
+    }
+
+    const decisions = listOfferDecisions.all(offerListingId);
+
+    return res.json({
+      offerListingId,
+      offerStatus: offer.status,
+      decisions,
+    });
+  } catch (err) {
+    console.error("getOfferDecisions error:", err);
+    return res.status(500).json({ error: err.message || "Failed to fetch decisions." });
+  }
+};

@@ -294,6 +294,52 @@ CREATE TABLE IF NOT EXISTS process_capabilities (
 
 
 -- ============================================================
+-- TABLE 8: offer_decisions
+-- ============================================================
+-- Tracks decision state between one OFFER and one DEMAND listing.
+-- Two-step handshake model:
+--   - seller_decision: decision from OFFER owner
+--   - buyer_decision: decision from DEMAND owner
+-- Final behavior:
+--   - both ACCEPTED   -> final_status = ACCEPTED and both listings close
+--   - either REJECTED -> final_status = REJECTED and listings stay ACTIVE
+-- ============================================================
+CREATE TABLE IF NOT EXISTS offer_decisions (
+    id                INTEGER     PRIMARY KEY AUTOINCREMENT,
+    offer_listing_id  INTEGER     NOT NULL,
+    demand_listing_id INTEGER     NOT NULL,
+    seller_user_id    INTEGER     NOT NULL,
+    buyer_user_id     INTEGER     NOT NULL,
+
+    seller_decision   TEXT        NOT NULL DEFAULT 'PENDING'
+        CHECK (seller_decision IN ('PENDING', 'ACCEPTED', 'REJECTED')),
+    buyer_decision    TEXT        NOT NULL DEFAULT 'PENDING'
+        CHECK (buyer_decision IN ('PENDING', 'ACCEPTED', 'REJECTED')),
+    final_status      TEXT        NOT NULL DEFAULT 'OPEN'
+        CHECK (final_status IN ('OPEN', 'ACCEPTED', 'REJECTED', 'CANCELLED')),
+
+    created_at        TEXT        NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT        NOT NULL DEFAULT (datetime('now')),
+
+    UNIQUE (offer_listing_id, demand_listing_id),
+
+    FOREIGN KEY (offer_listing_id)  REFERENCES listings(id) ON DELETE CASCADE,
+    FOREIGN KEY (demand_listing_id) REFERENCES listings(id) ON DELETE CASCADE,
+    FOREIGN KEY (seller_user_id)    REFERENCES users(id)    ON DELETE CASCADE,
+    FOREIGN KEY (buyer_user_id)     REFERENCES users(id)    ON DELETE CASCADE
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_offer_decisions_updated_at
+AFTER UPDATE ON offer_decisions
+FOR EACH ROW
+BEGIN
+    UPDATE offer_decisions
+    SET updated_at = datetime('now')
+    WHERE id = NEW.id;
+END;
+
+
+-- ============================================================
 -- INDEXES (for query performance)
 -- ============================================================
 CREATE INDEX IF NOT EXISTS idx_listings_user_id     ON listings(user_id);
@@ -306,3 +352,6 @@ CREATE INDEX IF NOT EXISTS idx_accept_crit_chem      ON acceptance_criteria(chem
 CREATE INDEX IF NOT EXISTS idx_proc_cap_processor    ON process_capabilities(processor_id);
 CREATE INDEX IF NOT EXISTS idx_proc_cap_input        ON process_capabilities(input_chem_id);
 CREATE INDEX IF NOT EXISTS idx_proc_cap_output       ON process_capabilities(output_chem_id);
+CREATE INDEX IF NOT EXISTS idx_offer_decisions_offer  ON offer_decisions(offer_listing_id);
+CREATE INDEX IF NOT EXISTS idx_offer_decisions_demand ON offer_decisions(demand_listing_id);
+CREATE INDEX IF NOT EXISTS idx_offer_decisions_status ON offer_decisions(final_status);

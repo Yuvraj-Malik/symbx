@@ -15,4 +15,25 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Auto-clear stale auth on protected endpoint 401 responses.
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    const requestUrl = String(error?.config?.url || "");
+    const isAuthEndpoint = requestUrl.includes("/auth/login") || requestUrl.includes("/auth/register");
+
+    if (status === 401 && !isAuthEndpoint) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("auth:unauthorized"));
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 export default api;

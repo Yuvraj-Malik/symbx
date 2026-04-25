@@ -196,3 +196,59 @@ exports.getMyListings = (req, res) => {
     res.status(500).json({ error: "Failed to fetch your listings." });
   }
 };
+
+// GET /api/listings/:id — fetch one listing with composition + criteria + user info
+exports.getListingById = (req, res) => {
+  try {
+    const listingId = Number(req.params.id);
+
+    if (!listingId) {
+      return res.status(400).json({ error: "Valid listing id is required." });
+    }
+
+    const listing = db.prepare(`
+      SELECT l.id, l.user_id, l.type, l.material_name, l.total_quantity,
+             l.status, l.created_at AS createdAt,
+             u.name AS userName, u.industry_type, u.location
+      FROM listings l
+      JOIN users u ON u.id = l.user_id
+      WHERE l.id = ?
+    `).get(listingId);
+
+    if (!listing) {
+      return res.status(404).json({ error: "Listing not found." });
+    }
+
+    const composition = db.prepare(`
+      SELECT bc.listing_id, bc.chem_id, bc.percentage,
+             c.name AS chemName, c.hazard_level
+      FROM batch_composition bc
+      JOIN chemicals c ON c.id = bc.chem_id
+      WHERE bc.listing_id = ?
+      ORDER BY bc.percentage DESC
+    `).all(listingId);
+
+    const criteria = db.prepare(`
+      SELECT ac.listing_id, ac.chem_id, ac.min_percentage, ac.max_percentage,
+             c.name AS chemName, c.hazard_level
+      FROM acceptance_criteria ac
+      JOIN chemicals c ON c.id = ac.chem_id
+      WHERE ac.listing_id = ?
+      ORDER BY c.name ASC
+    `).all(listingId);
+
+    return res.json({
+      ...listing,
+      composition,
+      criteria,
+      user: {
+        name: listing.userName,
+        industry_type: listing.industry_type,
+        location: listing.location,
+      },
+    });
+  } catch (err) {
+    console.error("getListingById error:", err);
+    return res.status(500).json({ error: "Failed to fetch listing details." });
+  }
+};
