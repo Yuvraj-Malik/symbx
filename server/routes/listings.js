@@ -14,4 +14,10 @@ router.get("/my", authMiddleware, listingsController.getMyListings);
 // Protected: get one listing details
 router.get("/:id", authMiddleware, listingsController.getListingById);
 
+// Protected: update a listing
+router.put("/:id", authMiddleware, listingsController.updateListing);
+
+// Protected: delete a listing
+router.delete("/:id", authMiddleware, listingsController.deleteListing);
+
 module.exports = router;

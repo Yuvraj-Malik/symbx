@@ -126,7 +126,27 @@ CREATE TABLE IF NOT EXISTS listings (
 
 
 -- ============================================================
--- TABLE 4: batch_composition
+-- TABLE 4: hidden_listings
+-- ============================================================
+-- Per-user visibility control for listings.
+-- If a user rejects an OFFER, the listing is hidden only for that user
+-- while remaining visible to everyone else.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS hidden_listings (
+    id          INTEGER     PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER     NOT NULL,
+    listing_id  INTEGER     NOT NULL,
+    hidden_at   TEXT        NOT NULL DEFAULT (datetime('now')),
+
+    UNIQUE (user_id, listing_id),
+
+    FOREIGN KEY (user_id)    REFERENCES users(id)    ON DELETE CASCADE,
+    FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE
+);
+
+
+-- ============================================================
+-- TABLE 5: batch_composition
 -- ============================================================
 -- The 1-to-Many "Composition" link.
 -- Each row says: "Listing #X contains Y% of Chemical Z."
@@ -160,7 +180,7 @@ CREATE TABLE IF NOT EXISTS batch_composition (
 
 
 -- ============================================================
--- TABLE 5: acceptance_criteria
+-- TABLE 6: acceptance_criteria
 -- ============================================================
 -- The "Constraint" link — buyer-side rules on a DEMAND listing.
 -- Each row says: "For Demand #X, Chemical Z must be between min% and max%."
@@ -209,7 +229,7 @@ CREATE TABLE IF NOT EXISTS acceptance_criteria (
 
 
 -- ============================================================
--- TABLE 6: hazard_matrix
+-- TABLE 7: hazard_matrix
 -- ============================================================
 -- Many-to-Many safety rules: which chemical pairs are incompatible.
 -- Before finalizing a deal, the system checks this table to ensure
@@ -245,7 +265,7 @@ CREATE TABLE IF NOT EXISTS hazard_matrix (
 
 
 -- ============================================================
--- TABLE 7: process_capabilities
+-- TABLE 8: process_capabilities
 -- ============================================================
 -- The "Intermediary" graph link.
 -- Defines what a processor (a User) can convert:
@@ -294,7 +314,7 @@ CREATE TABLE IF NOT EXISTS process_capabilities (
 
 
 -- ============================================================
--- TABLE 8: offer_decisions
+-- TABLE 9: offer_decisions
 -- ============================================================
 -- Tracks decision state between one OFFER and one DEMAND listing.
 -- Two-step handshake model:
