@@ -94,6 +94,8 @@ exports.createListing = (req, res) => {
 // GET /api/listings — fetch all active listings with composition + criteria + user info
 exports.getListings = (req, res) => {
   try {
+    const userId = req.user.id;
+
     // Get all active listings with user info
     const listings = db.prepare(`
       SELECT l.id, l.user_id, l.type, l.material_name, l.total_quantity,
@@ -102,8 +104,12 @@ exports.getListings = (req, res) => {
       FROM listings l
       JOIN users u ON u.id = l.user_id
       WHERE l.status = 'ACTIVE'
+        AND NOT EXISTS (
+          SELECT 1 FROM hidden_listings hl
+          WHERE hl.user_id = ? AND hl.listing_id = l.id
+        )
       ORDER BY l.created_at DESC
-    `).all();
+    `).all(userId);
 
     // Get all composition rows for these listings
     const allComposition = db.prepare(`
@@ -112,10 +118,15 @@ exports.getListings = (req, res) => {
       FROM batch_composition bc
       JOIN chemicals c ON c.id = bc.chem_id
       WHERE bc.listing_id IN (
-        SELECT id FROM listings WHERE status = 'ACTIVE'
+        SELECT id FROM listings
+        WHERE status = 'ACTIVE'
+          AND NOT EXISTS (
+            SELECT 1 FROM hidden_listings hl
+            WHERE hl.user_id = ? AND hl.listing_id = listings.id
+          )
       )
       ORDER BY bc.percentage DESC
-    `).all();
+    `).all(userId);
 
     // Get all criteria rows for these listings
     const allCriteria = db.prepare(`
@@ -124,10 +135,15 @@ exports.getListings = (req, res) => {
       FROM acceptance_criteria ac
       JOIN chemicals c ON c.id = ac.chem_id
       WHERE ac.listing_id IN (
-        SELECT id FROM listings WHERE status = 'ACTIVE'
+        SELECT id FROM listings
+        WHERE status = 'ACTIVE'
+          AND NOT EXISTS (
+            SELECT 1 FROM hidden_listings hl
+            WHERE hl.user_id = ? AND hl.listing_id = listings.id
+          )
       )
       ORDER BY c.name ASC
-    `).all();
+    `).all(userId);
 
     // Attach composition and criteria to each listing
     const listingsWithDetails = listings.map(listing => ({
@@ -201,6 +217,7 @@ exports.getMyListings = (req, res) => {
 exports.getListingById = (req, res) => {
   try {
     const listingId = Number(req.params.id);
+    const userId = req.user.id;
 
     if (!listingId) {
       return res.status(400).json({ error: "Valid listing id is required." });
@@ -217,6 +234,18 @@ exports.getListingById = (req, res) => {
 
     if (!listing) {
       return res.status(404).json({ error: "Listing not found." });
+    }
+
+    if (listing.user_id !== userId) {
+      const hidden = db.prepare(`
+        SELECT 1
+        FROM hidden_listings
+        WHERE user_id = ? AND listing_id = ?
+      `).get(userId, listingId);
+
+      if (hidden) {
+        return res.status(404).json({ error: "Listing not found." });
+      }
     }
 
     const composition = db.prepare(`
@@ -250,5 +279,176 @@ exports.getListingById = (req, res) => {
   } catch (err) {
     console.error("getListingById error:", err);
     return res.status(500).json({ error: "Failed to fetch listing details." });
+  }
+};
+
+// PUT /api/listings/:id — update a listing (composition/criteria)
+exports.updateListing = (req, res) => {
+  try {
+    const listingId = Number(req.params.id);
+    const userId = req.user.id;
+    const { materialName, quantity, composition, criteria } = req.body;
+
+    if (!listingId) {
+      return res.status(400).json({ error: "Valid listing id is required." });
+    }
+
+    const listing = db.prepare("SELECT * FROM listings WHERE id = ?").get(listingId);
+    if (!listing) {
+      return res.status(404).json({ error: "Listing not found." });
+    }
+
+    if (listing.user_id !== userId) {
+      return res.status(403).json({ error: "You can only edit your own listings." });
+    }
+
+    if (listing.status !== "ACTIVE") {
+      return res.status(400).json({ error: "Can only edit ACTIVE listings." });
+    }
+
+    // Validation
+    if (materialName && materialName.trim() === "") {
+      return res.status(400).json({ error: "materialName cannot be empty." });
+    }
+    if (quantity && Number(quantity) <= 0) {
+      return res.status(400).json({ error: "quantity must be > 0." });
+    }
+
+    // Update transaction
+    const updateTransaction = db.transaction(() => {
+      // Update listing name and quantity if provided
+      if (materialName || quantity) {
+        const updateListing = db.prepare(`
+          UPDATE listings
+          SET material_name = ?, total_quantity = ?
+          WHERE id = ?
+        `);
+        updateListing.run(materialName || listing.material_name, quantity || listing.total_quantity, listingId);
+      }
+
+      // Update composition (OFFER) if provided
+      if (composition && composition.length > 0) {
+        // Delete old composition
+        db.prepare("DELETE FROM batch_composition WHERE listing_id = ?").run(listingId);
+        // Insert new composition
+        const insertComp = db.prepare(`
+          INSERT INTO batch_composition (listing_id, chem_id, percentage)
+          VALUES (?, ?, ?)
+        `);
+        for (const c of composition) {
+          insertComp.run(listingId, c.chemId, Number(c.percentage));
+        }
+      }
+
+      // Update criteria (DEMAND) if provided
+      if (criteria && criteria.length > 0) {
+        // Delete old criteria
+        db.prepare("DELETE FROM acceptance_criteria WHERE listing_id = ?").run(listingId);
+        // Insert new criteria
+        const insertCrit = db.prepare(`
+          INSERT INTO acceptance_criteria (listing_id, chem_id, min_percentage, max_percentage)
+          VALUES (?, ?, ?, ?)
+        `);
+        for (const c of criteria) {
+          insertCrit.run(
+            listingId,
+            c.chemId,
+            c.minPercentage != null ? Number(c.minPercentage) : null,
+            c.maxPercentage != null ? Number(c.maxPercentage) : null
+          );
+        }
+      }
+
+      // Fetch updated listing
+      return db.prepare(`
+        SELECT l.id, l.user_id, l.type, l.material_name, l.total_quantity,
+               l.status, l.created_at AS createdAt,
+               u.name AS userName, u.industry_type, u.location
+        FROM listings l
+        JOIN users u ON u.id = l.user_id
+        WHERE l.id = ?
+      `).get(listingId);
+    });
+
+    const updatedListing = updateTransaction();
+
+    const updatedComposition = db.prepare(`
+      SELECT bc.listing_id, bc.chem_id, bc.percentage,
+             c.name AS chemName, c.hazard_level
+      FROM batch_composition bc
+      JOIN chemicals c ON c.id = bc.chem_id
+      WHERE bc.listing_id = ?
+      ORDER BY bc.percentage DESC
+    `).all(listingId);
+
+    const updatedCriteria = db.prepare(`
+      SELECT ac.listing_id, ac.chem_id, ac.min_percentage, ac.max_percentage,
+             c.name AS chemName, c.hazard_level
+      FROM acceptance_criteria ac
+      JOIN chemicals c ON c.id = ac.chem_id
+      WHERE ac.listing_id = ?
+      ORDER BY c.name ASC
+    `).all(listingId);
+
+    return res.json({
+      message: "Listing updated successfully.",
+      listing: {
+        ...updatedListing,
+        composition: updatedComposition,
+        criteria: updatedCriteria,
+        user: {
+          name: updatedListing.userName,
+          industry_type: updatedListing.industry_type,
+          location: updatedListing.location,
+        },
+      },
+    });
+  } catch (err) {
+    console.error("updateListing error:", err);
+    return res.status(500).json({ error: "Failed to update listing." });
+  }
+};
+
+// DELETE /api/listings/:id — delete a listing
+exports.deleteListing = (req, res) => {
+  try {
+    const listingId = Number(req.params.id);
+    const userId = req.user.id;
+
+    if (!listingId) {
+      return res.status(400).json({ error: "Valid listing id is required." });
+    }
+
+    const listing = db.prepare("SELECT * FROM listings WHERE id = ?").get(listingId);
+    if (!listing) {
+      return res.status(404).json({ error: "Listing not found." });
+    }
+
+    if (listing.user_id !== userId) {
+      return res.status(403).json({ error: "You can only delete your own listings." });
+    }
+
+    // Delete transaction
+    const deleteTransaction = db.transaction(() => {
+      // Delete composition/criteria rows first
+      db.prepare("DELETE FROM batch_composition WHERE listing_id = ?").run(listingId);
+      db.prepare("DELETE FROM acceptance_criteria WHERE listing_id = ?").run(listingId);
+      // Delete the listing
+      const result = db.prepare("DELETE FROM listings WHERE id = ?").run(listingId);
+      return result.changes;
+    });
+
+    const changes = deleteTransaction();
+
+    if (changes === 0) {
+      return res.status(400).json({ error: "Failed to delete listing." });
+    }
+
+    return res.json({
+      message: "Listing deleted successfully.",
+    });
+  } catch (err) {
+    console.error("deleteListing error:", err);
+    return res.status(500).json({ error: "Failed to delete listing." });
   }
 };
