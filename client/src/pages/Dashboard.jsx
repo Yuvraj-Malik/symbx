@@ -212,29 +212,35 @@ export default function Dashboard() {
         <Link to="/search" className="btn-accent flex items-center gap-2">
           <Search className="w-4 h-4" /> Smart Search
         </Link>
-        {myOffers.length > 0 && (
-          <Link to="/match-buyers" className="btn-green flex items-center gap-2">
-            <CheckCircle className="w-4 h-4" /> Find Buyers
-          </Link>
-        )}
       </div>
 
-      {/* My Listings */}
-      {myListings.length > 0 && (
+      {/* My Offers */}
+      {myOffers.length > 0 && (
         <div className="mb-8">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">My Listings</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">My Offers</h2>
+            <span className="text-sm text-gray-500 dark:text-gray-400">Click a card to manage or match buyers</span>
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
-            {myListings.slice(0, 4).map((l, i) => (
-              <ListingCard key={l.id} listing={l} index={i} />
+            {myOffers.map((l, i) => (
+              <ListingCard key={l.id} listing={l} index={i} showManageActions />
             ))}
           </div>
-          {myListings.length > 4 && (
-            <div className="mt-4 text-center">
-              <Link to="/my-listings" className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
-                View all my listings →
-              </Link>
-            </div>
-          )}
+        </div>
+      )}
+
+      {/* My Demands */}
+      {myDemands.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">My Demands</h2>
+            <span className="text-sm text-gray-500 dark:text-gray-400">Open a demand to edit or review details</span>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {myDemands.map((l, i) => (
+              <ListingCard key={l.id} listing={l} index={i} showManageActions />
+            ))}
+          </div>
         </div>
       )}
 

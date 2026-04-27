@@ -1,9 +1,9 @@
 import { motion } from "framer-motion";
-import { Package, Factory, MapPin, Clock, ChevronRight } from "lucide-react";
+import { Package, Factory, MapPin, Clock, ChevronRight, Search } from "lucide-react";
 import { Link } from "react-router-dom";
 import CompositionBar from "./CompositionBar";
 
-export default function ListingCard({ listing, index = 0 }) {
+export default function ListingCard({ listing, index = 0, showManageActions = false }) {
   const isOffer = listing.type === "OFFER";
   const composition = listing.composition || [];
   const criteria = listing.criteria || [];
@@ -102,10 +102,26 @@ export default function ListingCard({ listing, index = 0 }) {
       </Link>
 
       {isOffer && listing.id && (
-        <Link to={`/match-buyers?supplyId=${listing.id}`}
-          className="mt-2 flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity">
-          Find matching buyers <ChevronRight className="w-3 h-3" />
+        <Link
+          to={`/match-buyers?supplyId=${listing.id}`}
+          className={`mt-2 inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 ${showManageActions ? "opacity-100" : "opacity-0 group-hover:opacity-100"} transition-opacity`}
+        >
+          <Search className="w-3 h-3" />
+          Find matching buyers
         </Link>
+      )}
+
+      {showManageActions && (
+        <div className="mt-3 flex items-center gap-2">
+          {isOffer && (
+            <Link
+              to={`/match-buyers?supplyId=${listing.id}`}
+              className="inline-flex items-center gap-1 text-xs font-medium px-3 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700"
+            >
+              <Search className="w-3 h-3" /> Find buyers
+            </Link>
+          )}
+        </div>
       )}
     </motion.div>
   );

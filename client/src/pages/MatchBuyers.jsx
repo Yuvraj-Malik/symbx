@@ -6,6 +6,7 @@ import api from "../api/axios";
 import PageWrapper from "../components/PageWrapper";
 import EmptyState from "../components/EmptyState";
 import SkeletonCard from "../components/SkeletonCard";
+import ListingCard from "../components/ListingCard";
 
 export default function MatchBuyers() {
   const [searchParams] = useSearchParams();
@@ -13,20 +14,32 @@ export default function MatchBuyers() {
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [myOffers, setMyOffers] = useState([]);
 
   // Auto-search if supplyId is in URL
   useEffect(() => {
+    const loadOffers = async () => {
+      try {
+        const res = await api.get("/listings/my");
+        setMyOffers((res.data || []).filter((l) => l.type === "OFFER"));
+      } catch (err) {
+        console.error("Failed to load your offers:", err);
+      }
+    };
+
+    loadOffers();
+
     if (supplyId) handleSearch();
   }, []); // eslint-disable-line
 
-  const handleSearch = async () => {
-    if (!supplyId) { setError("Enter a supply listing ID."); return; }
-    if (Number.isNaN(Number(supplyId))) { setError("Supply listing ID must be a number."); return; }
+  const handleSearch = async (listingId = supplyId) => {
+    if (!listingId) { setError("Select one of your offers first."); return; }
+    if (Number.isNaN(Number(listingId))) { setError("Supply listing ID must be a number."); return; }
     setLoading(true);
     setError("");
     setResults(null);
     try {
-      const res = await api.post("/search/match-buyers", { supplyListingId: Number(supplyId) });
+      const res = await api.post("/search/match-buyers", { supplyListingId: Number(listingId) });
       setResults(res.data);
     } catch (err) {
       setError(err.response?.data?.error || "Matching failed. Please try again.");
@@ -41,23 +54,40 @@ export default function MatchBuyers() {
         Match <span className="gradient-text">Buyers</span>
       </h1>
       <p className="text-gray-500 dark:text-gray-400 mb-6">
-        Enter your supply listing ID to find buyers whose acceptance criteria match your waste composition.
+        Pick one of your offers below to find buyers with at least one chemical or criteria overlap.
       </p>
 
-      {/* Input */}
+      {/* Your Offers */}
       <div className="glass-card p-6 mb-6">
-        <div className="flex gap-3">
-          <input type="number" placeholder="Supply Listing ID (e.g. 1)" value={supplyId}
-            onChange={(e) => setSupplyId(e.target.value)}
-            className="input-base flex-1" />
-          <motion.button onClick={handleSearch} disabled={loading} whileTap={{ scale: 0.97 }}
-            className="btn-primary flex items-center gap-2">
-            {loading
-              ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              : <FlaskConical className="w-4 h-4" />}
-            {loading ? "Matching..." : "Find Buyers"}
-          </motion.button>
-        </div>
+        {myOffers.length === 0 ? (
+          <EmptyState
+            icon={FlaskConical}
+            title="No offers found"
+            description="Create an offer first, then return here to see matching buyers."
+          />
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {myOffers.map((offer, index) => (
+              <div key={offer.id} className="relative">
+                <ListingCard listing={offer} index={index} showManageActions />
+                <motion.button
+                  onClick={() => {
+                    setSupplyId(String(offer.id));
+                    handleSearch(offer.id);
+                  }}
+                  disabled={loading}
+                  whileTap={{ scale: 0.97 }}
+                  className="absolute top-4 right-4 btn-primary flex items-center gap-2"
+                >
+                  {loading
+                    ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    : <FlaskConical className="w-4 h-4" />}
+                  {loading ? "Matching..." : "Find Buyers"}
+                </motion.button>
+              </div>
+            ))}
+          </div>
+        )}
         {error && <p className="text-sm text-red-600 dark:text-red-400 mt-3">{error}</p>}
       </div>
 
@@ -88,7 +118,7 @@ export default function MatchBuyers() {
               <div className="grid gap-4">{[...Array(2)].map((_, i) => <SkeletonCard key={i} />)}</div>
             ) : results.matches?.length === 0 ? (
               <EmptyState icon={FlaskConical} title="No matching buyers"
-                description={results.note || "No demand listings have acceptance criteria that your waste composition satisfies."} />
+                description={results.note || "No demand listings share any chemical overlap with this offer."} />
             ) : (
               <div className="grid gap-4">
                 {results.matches.map((m, i) => (
