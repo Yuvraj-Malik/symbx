@@ -35,7 +35,7 @@ exports.matchListings = (req, res) => {
 
     const allowedOps = ["<", ">", "<=", ">=", "="];
     const conditions = [];
-      const rawDecision = req.body.decision;
+    const params = [];
 
     // Build one EXISTS subquery per filter
     for (const f of filters) {
@@ -71,6 +71,7 @@ exports.matchListings = (req, res) => {
         l.id, l.type, l.material_name, l.total_quantity,
         l.status, l.created_at AS createdAt,
         u.name AS user_name, u.industry_type, u.location
+      FROM listings l
       JOIN users u ON u.id = l.user_id
       WHERE l.status = 'ACTIVE'
         AND ${conditions.join(" AND ")}
@@ -116,20 +117,20 @@ exports.matchListings = (req, res) => {
 // ★ THE STAR QUERY — "Find a buyer for my waste listing #X" ★
 //
 // Given a supply listing's batch_composition, find all DEMAND
-// listings whose acceptance_criteria are FULLY satisfied.
+// listings that share at least one chemical/criteria overlap.
 //
 // SQL CONCEPTS USED:
 //   - Multi-table JOIN (5 tables in one query)
 //   - Correlated subquery (total criteria count)
-//   - GROUP BY with HAVING COUNT (ensure ALL criteria match)
+//   - GROUP BY with HAVING COUNT (return any partial overlap)
 //   - NULL-safe comparisons (IS NULL OR ...)
 //   - Aggregate functions: COUNT()
 //
 // LOGIC:
-//   For EVERY chemical the buyer cares about, the seller's
+//   For ANY chemical the buyer cares about, the seller's
 //   percentage must fall within [min_percentage, max_percentage].
-//   We GROUP BY demand listing and use HAVING COUNT = total
-//   criteria count to ensure ALL criteria are satisfied.
+//   We GROUP BY demand listing and keep demands with at least one
+//   overlapping matched criterion.
 // ============================================================
 exports.matchBuyers = (req, res) => {
   try {
@@ -140,7 +141,7 @@ exports.matchBuyers = (req, res) => {
     }
 
     const supplyListing = db.prepare(`
-      SELECT id, type, status, material_name
+      SELECT id, user_id, type, status, material_name
       FROM listings
       WHERE id = ?
     `).get(supplyListingId);
@@ -189,6 +190,7 @@ exports.matchBuyers = (req, res) => {
 
       WHERE demand.type   = 'DEMAND'
         AND demand.status = 'ACTIVE'
+        AND demand.user_id != ?
         -- NULL-safe range check:
         AND (ac.min_percentage IS NULL OR mc.percentage >= ac.min_percentage)
         AND (ac.max_percentage IS NULL OR mc.percentage <= ac.max_percentage)
@@ -198,11 +200,11 @@ exports.matchBuyers = (req, res) => {
         buyer.name, buyer.industry_type, buyer.location,
         total_crit.total
 
-      -- THE KEY: only return demands where ALL criteria matched
-      HAVING COUNT(ac.id) = total_crit.total
+      -- Return demands where at least one criterion matched
+      HAVING COUNT(DISTINCT ac.id) > 0
 
       ORDER BY demand.created_at DESC
-    `).all(supplyListingId);
+    `).all(supplyListingId, supplyListing.user_id);
 
     // Check hazard compatibility for the supply listing
     const hazardWarnings = db.prepare(`
@@ -235,7 +237,7 @@ exports.matchBuyers = (req, res) => {
       },
       note: hazardWarnings.length > 0
         ? "Transport hazard detected — some chemicals in this waste are incompatible."
-        : (matches.length === 0 ? "No compatible buyers found for this supply listing." : null),
+        : (matches.length === 0 ? "No partial buyer matches found for this supply listing." : null),
     });
   } catch (err) {
     console.error("matchBuyers error:", err);
@@ -368,58 +370,6 @@ const hideListingForUser = db.prepare(`
   ON CONFLICT(user_id, listing_id) DO NOTHING
 `);
 
-const getHazardCountForOffer = db.prepare(`
-  SELECT COUNT(*) AS cnt
-  FROM batch_composition mc1
-  JOIN batch_composition mc2
-    ON mc1.listing_id = mc2.listing_id
-    AND mc1.chem_id < mc2.chem_id
-  JOIN hazard_matrix hm
-    ON hm.chem_id_1 = mc1.chem_id
-    AND hm.chem_id_2 = mc2.chem_id
-    AND hm.is_incompatible = 1
-  WHERE mc1.listing_id = ?
-`);
-
-
-exports.createDecision = (req, res) => {
-  try {
-    const actorUserId = req.user.id;
-    const offerListingId = Number(req.body.offerListingId);
-
-    if (!offerListingId) {
-      return badRequest(res, "offerListingId is required.");
-    }
-
-    const offer = getListingById.get(offerListingId);
-    if (!offer) {
-      return res.status(404).json({ error: "Offer listing not found." });
-    }
-    if (offer.type !== "OFFER") {
-      return badRequest(res, "Must be an OFFER listing.");
-    }
-    if (offer.status !== "ACTIVE") {
-      return badRequest(res, "Only ACTIVE listings can be acted on.");
-    }
-    if (actorUserId === offer.user_id) {
-      return res.status(403).json({ error: "You cannot act on your own offer." });
-    }
-
-    const hazards = getHazardCountForOffer.get(offerListingId);
-
-    return res.status(200).json({
-      message: "Offer is ready for accept/reject.",
-      hazardWarning:
-        hazards && hazards.cnt > 0
-          ? "⚠️ This offer contains incompatible chemical pairs. Review transport requirements carefully."
-          : null,
-    });
-  } catch (err) {
-    console.error("createDecision error:", err);
-    return res.status(500).json({ error: err.message || "Failed to create decision." });
-  }
-};
-
 exports.respondDecision = (req, res) => {
   try {
     const actorUserId = req.user.id;
@@ -489,6 +439,3 @@ exports.respondDecision = (req, res) => {
   }
 };
 
-exports.getOfferDecisions = (_req, res) => {
-  return res.status(410).json({ error: "Offer decision history is not used in this demo flow." });
-};

@@ -104,12 +104,13 @@ exports.getListings = (req, res) => {
       FROM listings l
       JOIN users u ON u.id = l.user_id
       WHERE l.status = 'ACTIVE'
+        AND l.user_id != ?
         AND NOT EXISTS (
           SELECT 1 FROM hidden_listings hl
           WHERE hl.user_id = ? AND hl.listing_id = l.id
         )
       ORDER BY l.created_at DESC
-    `).all(userId);
+    `).all(userId, userId);
 
     // Get all composition rows for these listings
     const allComposition = db.prepare(`
@@ -120,13 +121,14 @@ exports.getListings = (req, res) => {
       WHERE bc.listing_id IN (
         SELECT id FROM listings
         WHERE status = 'ACTIVE'
+          AND user_id != ?
           AND NOT EXISTS (
             SELECT 1 FROM hidden_listings hl
             WHERE hl.user_id = ? AND hl.listing_id = listings.id
           )
       )
       ORDER BY bc.percentage DESC
-    `).all(userId);
+    `).all(userId, userId);
 
     // Get all criteria rows for these listings
     const allCriteria = db.prepare(`
@@ -137,13 +139,14 @@ exports.getListings = (req, res) => {
       WHERE ac.listing_id IN (
         SELECT id FROM listings
         WHERE status = 'ACTIVE'
+          AND user_id != ?
           AND NOT EXISTS (
             SELECT 1 FROM hidden_listings hl
             WHERE hl.user_id = ? AND hl.listing_id = listings.id
           )
       )
       ORDER BY c.name ASC
-    `).all(userId);
+    `).all(userId, userId);
 
     // Attach composition and criteria to each listing
     const listingsWithDetails = listings.map(listing => ({
