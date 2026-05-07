@@ -4,6 +4,7 @@ import { FlaskConical, AlertTriangle, CheckCircle2, MapPin, Building2 } from "lu
 import { motion, AnimatePresence } from "framer-motion";
 import api from "../api/axios";
 import PageWrapper from "../components/PageWrapper";
+import { useApp } from "../context/AppContext";
 import EmptyState from "../components/EmptyState";
 import SkeletonCard from "../components/SkeletonCard";
 import ListingCard from "../components/ListingCard";
@@ -15,6 +16,8 @@ export default function MatchBuyers() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [myOffers, setMyOffers] = useState([]);
+  const { showToast, user } = useApp();
+  const [responding, setResponding] = useState({});
 
   // Auto-search if supplyId is in URL
   useEffect(() => {
@@ -68,22 +71,17 @@ export default function MatchBuyers() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {myOffers.map((offer, index) => (
-              <div key={offer.id} className="relative">
-                <ListingCard listing={offer} index={index} showManageActions />
-                <motion.button
-                  onClick={() => {
-                    setSupplyId(String(offer.id));
-                    handleSearch(offer.id);
+              <div key={offer.id}>
+                <ListingCard
+                  listing={offer}
+                  index={index}
+                  showManageActions
+                  onFindBuyers={(id) => {
+                    setSupplyId(String(id));
+                    handleSearch(id);
                   }}
-                  disabled={loading}
-                  whileTap={{ scale: 0.97 }}
-                  className="absolute top-4 right-4 btn-primary flex items-center gap-2"
-                >
-                  {loading
-                    ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    : <FlaskConical className="w-4 h-4" />}
-                  {loading ? "Matching..." : "Find Buyers"}
-                </motion.button>
+                  findLoading={loading}
+                />
               </div>
             ))}
           </div>
@@ -147,6 +145,66 @@ export default function MatchBuyers() {
                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
                       Needs: <strong>{m.demand_quantity} tons</strong>
                     </p>
+                    {(() => {
+                      const isOwner = myOffers.some((o) => o.id === results.supplyListing.id);
+                      if (!isOwner) {
+                        return (
+                          <div className="mt-4 flex gap-2">
+                            <button
+                              onClick={async () => {
+                                try {
+                                  setResponding((s) => ({ ...s, [m.demand_id]: "accept" }));
+                                  const res = await api.post("/search/decisions/respond", {
+                                    offerListingId: results.supplyListing.id,
+                                    decision: "ACCEPTED",
+                                  });
+                                  showToast(res.data.outcome, "success");
+                                  // Clear results since offer is closed on accept
+                                  setResults(null);
+                                } catch (err) {
+                                  const msg = err.response?.data?.error || "Failed to accept.";
+                                  showToast(msg, "error");
+                                } finally {
+                                  setResponding((s) => ({ ...s, [m.demand_id]: null }));
+                                }
+                              }}
+                              disabled={responding[m.demand_id]}
+                              className="px-3 py-2 rounded-lg bg-green-600 text-white text-sm disabled:opacity-60"
+                            >
+                              {responding[m.demand_id] === "accept" ? "Working..." : "Accept"}
+                            </button>
+
+                            <button
+                              onClick={async () => {
+                                try {
+                                  setResponding((s) => ({ ...s, [m.demand_id]: "reject" }));
+                                  const res = await api.post("/search/decisions/respond", {
+                                    offerListingId: results.supplyListing.id,
+                                    decision: "REJECTED",
+                                  });
+                                  showToast(res.data.outcome, "info");
+                                  // Refresh matches after rejection
+                                  handleSearch();
+                                } catch (err) {
+                                  const msg = err.response?.data?.error || "Failed to reject.";
+                                  showToast(msg, "error");
+                                } finally {
+                                  setResponding((s) => ({ ...s, [m.demand_id]: null }));
+                                }
+                              }}
+                              disabled={responding[m.demand_id]}
+                              className="px-3 py-2 rounded-lg bg-red-600 text-white text-sm disabled:opacity-60"
+                            >
+                              {responding[m.demand_id] === "reject" ? "Working..." : "Reject"}
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <p className="mt-3 text-xs text-gray-500">Only buyers can Accept/Reject offers from the offer page.</p>
+                      );
+                    })()}
                   </motion.div>
                 ))}
               </div>

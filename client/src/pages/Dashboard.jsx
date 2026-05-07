@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Factory, Package, FlaskConical, TrendingUp, PlusCircle, Search, AlertCircle, CheckCircle, ArrowRight } from "lucide-react";
+import { Factory, Package, TrendingUp, PlusCircle, AlertCircle, CheckCircle, ArrowRight } from "lucide-react";
 import api from "../api/axios";
 import PageWrapper from "../components/PageWrapper";
 import StatCard from "../components/StatCard";
@@ -208,9 +208,6 @@ export default function Dashboard() {
       <div className="flex gap-3 mb-8">
         <Link to="/post" className="btn-primary flex items-center gap-2">
           <PlusCircle className="w-4 h-4" /> Post New Listing
-        </Link>
-        <Link to="/search" className="btn-accent flex items-center gap-2">
-          <Search className="w-4 h-4" /> Smart Search
         </Link>
       </div>
 

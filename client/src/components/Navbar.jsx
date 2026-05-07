@@ -1,19 +1,24 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Recycle, LayoutDashboard, PlusCircle, Search, FlaskConical, Route, LogOut, Moon, Sun, LogIn } from "lucide-react";
+import { Recycle, LayoutDashboard, PlusCircle, FlaskConical, LogOut, Moon, Sun, LogIn, Database } from "lucide-react";
 import { useApp } from "../context/AppContext";
 
 const NAV_LINKS = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/post", label: "Post Listing", icon: PlusCircle, auth: true },
-  { to: "/search", label: "Smart Search", icon: Search },
   { to: "/match-buyers", label: "Match Buyers", icon: FlaskConical },
-  { to: "/processors", label: "Processors", icon: Route },
+  { to: "/schema", label: "Schema", icon: Database },
 ];
 
 export default function Navbar() {
   const { user, logout, darkMode, toggleDarkMode } = useApp();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
 
   return (
     <nav className="sticky top-0 z-40 glass-card border-b border-gray-200/60 dark:border-gray-700/60">
@@ -67,7 +72,7 @@ export default function Navbar() {
                 </div>
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{user.name}</span>
               </div>
-              <button onClick={logout}
+              <button onClick={handleLogout}
                 className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                 title="Logout">
                 <LogOut className="w-4 h-4" />
