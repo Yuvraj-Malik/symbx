@@ -4,17 +4,17 @@ import Navbar from "./components/Navbar";
 import Toast from "./components/Toast";
 import Dashboard from "./pages/Dashboard";
 import PostListing from "./pages/PostListing";
-import SmartSearch from "./pages/SmartSearch";
 import MatchBuyers from "./pages/MatchBuyers";
-import ProcessorFinder from "./pages/ProcessorFinder";
 import ListingDetails from "./pages/ListingDetails";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import Schema from "./pages/Schema";
 import { useApp } from "./context/AppContext";
 
 export default function App() {
   const { user, loading } = useApp();
   const location = useLocation();
+  const isAuthRoute = ["/login", "/register"].includes(location.pathname);
   const requireAuth = (element) => (user ? element : <Navigate to="/login" replace />);
 
   if (loading) {
@@ -30,17 +30,16 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      <Navbar />
+      {!isAuthRoute && <Navbar />}
       <Toast />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>
             <Route path="/" element={requireAuth(<Dashboard />)} />
-            <Route path="/search" element={requireAuth(<SmartSearch />)} />
             <Route path="/match-buyers" element={requireAuth(<MatchBuyers />)} />
-            <Route path="/processors" element={requireAuth(<ProcessorFinder />)} />
             <Route path="/post" element={requireAuth(<PostListing />)} />
             <Route path="/listings/:id" element={requireAuth(<ListingDetails />)} />
+            <Route path="/schema" element={<Schema />} />
             <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
             <Route path="/register" element={!user ? <Register /> : <Navigate to="/" />} />
           </Routes>

@@ -36,7 +36,6 @@ client/
 │   ├── pages/             # Page components
 │   │   ├── Login.jsx
 │   │   ├── Dashboard.jsx
-│   │   ├── SmartSearch.jsx
 │   │   └── ...
 │   ├── main.jsx           # React entry point
 │   └── index.css          # Global styles + design system
@@ -82,9 +81,7 @@ npm run build  # Production build
 | Login | `/login` | User authentication |
 | Dashboard | `/` | Overview with stats |
 | Post Listing | `/post` | Create OFFER/DEMAND |
-| Smart Search | `/search` | AI-powered search |
 | Match Buyers | `/match-buyers` | Find buyers for waste |
-| Processor Finder | `/processor-finder` | Find processing paths |
 
 ---
 
@@ -106,11 +103,6 @@ The app uses a centralized Axios instance (`src/api/axios.js`) that:
 - JWT-based login/logout
 - Protected routes with auth middleware
 - Token persistence in localStorage
-
-### Smart Search
-- Natural language prompt parsing
-- Regex-based chemical extraction
-- Manual filter application
 
 ### Visualizations
 - Composition bars for waste streams
@@ -144,9 +136,7 @@ npm run build
 The frontend is tested manually via:
 1. **Login flow**: JWT token handling
 2. **Dashboard**: Data loading and display
-3. **Search**: Filter application and results
-4. **Match Buyers**: Star query results visualization
-5. **Processor Finder**: Graph path visualization
+3. **Match Buyers**: Search results visualization
 
 ---
 
